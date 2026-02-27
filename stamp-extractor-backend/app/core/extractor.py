@@ -1,83 +1,77 @@
 import re
 
-def extract_engineer_name(text):
-    # Look for common name patterns in engineer stamps
+# Words that commonly appear in stamp areas but are NOT engineer names
+EXCLUDE_PHRASES = [
+    'PREPARED BY', 'TOWN OF', 'STATE OF', 'COMMONWEALTH', 'DEPARTMENT OF',
+    'PUBLIC WORKS', 'PERMIT DRAWINGS', 'NOT FOR', 'COMPLETE SET',
+    'THIS DOCUMENT', 'RELEASED TEMPORARILY', 'TIGHE BOND', 'ENVIRONMENTAL',
+    'CIVIL', 'STRUCTURAL', 'ENGINEER', 'ENGINEERING', 'LICENSED', 'REGISTERED',
+    'PROFESSIONAL', 'SEAL', 'SIGNATURE', 'DATE', 'SHEET', 'DRAWING',
+    'PROJECT', 'SCALE', 'REVISION', 'APPROVED', 'CHECKED', 'DRAWN',
+]
 
-    # Exclude common non-name words that might match patterns
-    exclude_words = ['PREPARED BY', 'TOWN OF', 'STATE OF', 'COMMONWEALTH',
-                     'DEPARTMENT OF', 'PUBLIC WORKS', 'PERMIT DRAWINGS',
-                     'NOT FOR', 'COMPLETE SET', 'THIS DOCUMENT', 'RELEASED TEMPORARILY',
-                     'TIGHE BOND', 'ENVIRONMENTAL', 'CIVIL']
+def _clean_ocr_line(line: str) -> str:
+    """Remove common OCR noise characters from a line."""
+    return re.sub(r'[|_~`@#$%^&*(){}\[\]<>]', '', line).strip()
 
-    # Common last names we might see in the sample
-    # Look for patterns like "MAHANNA" or "DANIELSON" and extract nearby text
+def extract_engineer_name(text: str):
+    lines = [_clean_ocr_line(l) for l in text.split('\n')]
 
-    # Pattern 1: Look for known engineer last names (for this specific PDF)
-    known_patterns = [
-        r'THOMAS\s+[A-Z]?\.?\s*MAHANNA',
-        r'MARY\s+[A-Z]?\.?\s*DANIELSON',
-    ]
+    # Pattern: 2-3 ALL-CAPS words (each 2+ letters) with optional middle initial
+    # e.g. "THOMAS A. MAHANNA" or "MARY DANIELSON"
+    name_pattern = re.compile(
+        r'\b([A-Z]{2,}(?:\s+[A-Z]\.?)?\s+[A-Z]{2,}(?:\s+[A-Z]{2,})?)\b'
+    )
 
-    for pattern in known_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(0).upper().strip()
-
-    # Pattern 2: Generic name pattern - First Middle? Last
-    # Look for 2-3 uppercase words that form a name
-    pattern = r'\b([A-Z]{2,}(?:\s+[A-Z]\.?)?\s+[A-Z]{2,})\b'
-
-    lines = text.split('\n')
     for line in lines:
-        # Skip lines with excluded phrases
-        if any(excl in line.upper() for excl in exclude_words):
+        upper = line.upper()
+
+        # Skip lines that are clearly not names
+        if any(excl in upper for excl in EXCLUDE_PHRASES):
+            continue
+        if re.search(r'\d', line):
+            continue
+        if len(line) < 4:
             continue
 
-        # Find all potential names
-        matches = re.findall(pattern, line)
+        matches = name_pattern.findall(upper)
         for name in matches:
-            # Filter out non-names
-            clean_name = name.strip()
-
-            # Skip if contains digits or too many special characters
-            if re.search(r'\d', clean_name):
-                continue
-
-            # Must have at least 2 words (first and last name)
-            words = clean_name.split()
+            words = name.split()
+            # Must be at least 2 words, none a single letter (unless middle initial)
             if len(words) < 2:
                 continue
-
-            # Check if it's not in exclude list
-            if any(excl in clean_name.upper() for excl in exclude_words):
+            # Filter single-letter non-initial words
+            if any(len(w) == 1 and not w.endswith('.') for w in words):
                 continue
-
-            return re.sub(r'\s+', ' ', clean_name).strip()
+            if any(excl in name for excl in EXCLUDE_PHRASES):
+                continue
+            return re.sub(r'\s+', ' ', name).strip()
 
     return None
 
-def extract_license_number(text):
-    # Look for patterns like "No. 12345", "License 12345", "PE 12345"
-    # Common prefixes for license numbers
-    prefixes = [r'NO\.?', r'LICENSE', r'LIC', r'REG\.?', r'PE', r'NUMBER']
-    
-    for prefix in prefixes:
-        pattern = rf'{prefix}\s*[:#-]?\s*(\d{{4,6}})'
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(1)
-            
-    # Fallback: look for any 4-6 digit number that isn't a date or zip code
-    # This is a broader heuristic
-    matches = re.findall(r'\b\d{4,6}\b', text)
-    for m in matches:
-        # Basic check to avoid common years or zip codes if possible
-        if not (m.startswith('19') or m.startswith('20')): # Not likely a year
-            return m
-            
+
+def extract_license_number(text: str):
+    # Priority: explicit label + number
+    labeled_pattern = re.compile(
+        r'(?:NO\.?|LICENSE|LIC\.?|REG\.?|PE|P\.E\.|S\.E\.|NUMBER|#)\s*[:#\-]?\s*(\d{4,8})',
+        re.IGNORECASE
+    )
+    match = labeled_pattern.search(text)
+    if match:
+        return match.group(1)
+
+    # Fallback: any standalone 4-6 digit number that doesn't look like a year or zip
+    for m in re.finditer(r'\b(\d{4,6})\b', text):
+        num = m.group(1)
+        # Skip likely years
+        if re.match(r'^(19|20)\d{2}$', num):
+            continue
+        return num
+
     return None
 
-def extract_fields(text):
+
+def extract_fields(text: str):
     return {
         "engineer_name": extract_engineer_name(text),
         "license_number": extract_license_number(text)

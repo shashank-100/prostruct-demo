@@ -332,10 +332,10 @@ export default function Home() {
                 <div
                   className="absolute border-4 border-red-500 bg-red-500/20 transition-all duration-500"
                   style={{
-                    left: `${(result.bounding_box[0] / imageSize.width) * displayedImageSize.width}px`,
-                    top: `${(result.bounding_box[1] / imageSize.height) * displayedImageSize.height}px`,
-                    width: `${(result.bounding_box[2] / imageSize.width) * displayedImageSize.width}px`,
-                    height: `${(result.bounding_box[3] / imageSize.height) * displayedImageSize.height}px`,
+                    left: `${result.bounding_box[0] * displayedImageSize.width}px`,
+                    top: `${result.bounding_box[1] * displayedImageSize.height}px`,
+                    width: `${result.bounding_box[2] * displayedImageSize.width}px`,
+                    height: `${result.bounding_box[3] * displayedImageSize.height}px`,
                     pointerEvents: 'none',
                   }}
                 >
