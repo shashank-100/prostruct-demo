@@ -1,13 +1,17 @@
 import base64
 from io import BytesIO
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from app.core.pdf_handler import open_pdf, get_page_dimensions, render_page_to_image, crop_bbox
+from app.core.pdf_handler import open_pdf, render_page_to_image, crop_bbox
 from app.core.layout_detector import detect_stamp_region
 from app.core.ocr_pipeline import preprocess_for_ocr, run_ocr
 from app.core.extractor import extract_fields
 from app.schemas import StampResponse
 
 router = APIRouter()
+
+# Single DPI constant used for BOTH preview and extraction so bounding box
+# coordinates are always in the same pixel-space as the preview image.
+RENDER_DPI = 150
 
 @router.post("/get-info")
 async def get_pdf_info(file: UploadFile = File(...)):
@@ -27,8 +31,7 @@ async def get_page_image(file: UploadFile = File(...), page: int = Form(...)):
         if page < 0 or page >= len(doc):
             raise HTTPException(status_code=400, detail="Invalid page number")
             
-        # Render at lower DPI for preview to keep it fast
-        page_img = render_page_to_image(doc, page, dpi=150)
+        page_img = render_page_to_image(doc, page, dpi=RENDER_DPI)
         
         buffered = BytesIO()
         page_img.save(buffered, format="JPEG")
@@ -51,15 +54,13 @@ async def extract_stamp(file: UploadFile = File(...), page: int = Form(...)):
         if page < 0 or page >= len(doc):
             raise HTTPException(status_code=400, detail="Invalid page number")
 
-        page_img = render_page_to_image(doc, page)
+        # Render at the SAME DPI as the preview so bounding box coordinates
+        # map 1-to-1 onto the image the frontend is displaying.
+        page_img = render_page_to_image(doc, page, dpi=RENDER_DPI)
 
-        width, height = get_page_dimensions(doc, page)
-        
-        # Rendered image dimensions (at 300 DPI)
-        img_width, img_height = page_img.size
-        
-        # Detect region based on original page dimensions
-        bbox = detect_stamp_region(img_width, img_height)
+        # Detect stamp region; pass the full image so the detector can
+        # analyse pixel content (contour-based, no Hough circles).
+        bbox = detect_stamp_region(page_img)
 
         cropped = crop_bbox(page_img, bbox)
 

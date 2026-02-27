@@ -27,15 +27,20 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
-  // Update displayed image size when image loads or result changes
+  // Recalculate displayed size whenever the window is resized so the
+  // bounding-box overlay stays aligned after the user resizes the browser.
   useEffect(() => {
-    if (imageRef.current && result) {
-      setDisplayedImageSize({
-        width: imageRef.current.width,
-        height: imageRef.current.height,
-      });
-    }
-  }, [result, pageImage]);
+    const handleResize = () => {
+      if (imageRef.current) {
+        setDisplayedImageSize({
+          width: imageRef.current.offsetWidth,
+          height: imageRef.current.offsetHeight,
+        });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -325,6 +330,13 @@ export default function Home() {
                 alt={`PDF Page ${currentPage + 1}`}
                 className="max-w-full max-h-full shadow-2xl border border-gray-300 block"
                 style={{ maxHeight: 'calc(100vh - 200px)' }}
+                onLoad={(e) => {
+                  const el = e.currentTarget;
+                  setDisplayedImageSize({
+                    width: el.offsetWidth,
+                    height: el.offsetHeight,
+                  });
+                }}
               />
 
               {/* Bounding Box Overlay */}
