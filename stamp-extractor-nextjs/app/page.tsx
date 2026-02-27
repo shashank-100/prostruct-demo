@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle, Copy, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -23,8 +23,19 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<StampResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [displayedImageSize, setDisplayedImageSize] = useState({ width: 0, height: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+
+  // Update displayed image size when image loads or result changes
+  useEffect(() => {
+    if (imageRef.current && result) {
+      setDisplayedImageSize({
+        width: imageRef.current.width,
+        height: imageRef.current.height,
+      });
+    }
+  }, [result, pageImage]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -317,14 +328,14 @@ export default function Home() {
               />
 
               {/* Bounding Box Overlay */}
-              {result && result.bounding_box && imageRef.current && (
+              {result && result.bounding_box && displayedImageSize.width > 0 && (
                 <div
                   className="absolute border-4 border-red-500 bg-red-500/20 transition-all duration-500"
                   style={{
-                    left: `${(result.bounding_box[0] / imageSize.width) * imageRef.current.width}px`,
-                    top: `${(result.bounding_box[1] / imageSize.height) * imageRef.current.height}px`,
-                    width: `${(result.bounding_box[2] / imageSize.width) * imageRef.current.width}px`,
-                    height: `${(result.bounding_box[3] / imageSize.height) * imageRef.current.height}px`,
+                    left: `${(result.bounding_box[0] / imageSize.width) * displayedImageSize.width}px`,
+                    top: `${(result.bounding_box[1] / imageSize.height) * displayedImageSize.height}px`,
+                    width: `${(result.bounding_box[2] / imageSize.width) * displayedImageSize.width}px`,
+                    height: `${(result.bounding_box[3] / imageSize.height) * displayedImageSize.height}px`,
                     pointerEvents: 'none',
                   }}
                 >
