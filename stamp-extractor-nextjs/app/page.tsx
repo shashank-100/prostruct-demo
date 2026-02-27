@@ -24,6 +24,7 @@ export default function Home() {
   const [result, setResult] = useState<StampResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -109,6 +110,9 @@ export default function Home() {
       if (!res.ok) throw new Error('Extraction failed');
 
       const data = await res.json();
+      console.log('Extraction result:', data);
+      console.log('Bounding box:', data.bounding_box);
+      console.log('Image size:', imageSize);
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -305,6 +309,7 @@ export default function Home() {
           ) : pageImage ? (
             <div className="relative inline-block">
               <img
+                ref={imageRef}
                 src={pageImage}
                 alt={`PDF Page ${currentPage + 1}`}
                 className="max-w-full max-h-full shadow-2xl border border-gray-300 block"
@@ -312,14 +317,14 @@ export default function Home() {
               />
 
               {/* Bounding Box Overlay */}
-              {result && result.bounding_box && (
+              {result && result.bounding_box && imageRef.current && (
                 <div
                   className="absolute border-4 border-red-500 bg-red-500/20 transition-all duration-500"
                   style={{
-                    left: `${(result.bounding_box[0] / imageSize.width) * 100}%`,
-                    top: `${(result.bounding_box[1] / imageSize.height) * 100}%`,
-                    width: `${(result.bounding_box[2] / imageSize.width) * 100}%`,
-                    height: `${(result.bounding_box[3] / imageSize.height) * 100}%`,
+                    left: `${(result.bounding_box[0] / imageSize.width) * imageRef.current.width}px`,
+                    top: `${(result.bounding_box[1] / imageSize.height) * imageRef.current.height}px`,
+                    width: `${(result.bounding_box[2] / imageSize.width) * imageRef.current.width}px`,
+                    height: `${(result.bounding_box[3] / imageSize.height) * imageRef.current.height}px`,
                     pointerEvents: 'none',
                   }}
                 >
