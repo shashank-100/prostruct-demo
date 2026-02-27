@@ -124,6 +124,27 @@ export default function Home() {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type === 'application/pdf') {
+        // Manually trigger file selection
+        const event = { target: { files: [droppedFile] } } as any;
+        handleFileChange(event);
+      } else {
+        setError('Please upload a PDF file');
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
 
@@ -154,6 +175,8 @@ export default function Home() {
 
             <div
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
                 file ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:bg-gray-50'
               }`}
