@@ -303,27 +303,29 @@ export default function Home() {
               <p>Loading page...</p>
             </div>
           ) : pageImage ? (
-            <div className="relative max-w-full max-h-full">
+            <div className="relative inline-block">
               <img
                 src={pageImage}
                 alt={`PDF Page ${currentPage + 1}`}
-                className="max-w-full max-h-full shadow-2xl border border-gray-300"
+                className="max-w-full max-h-full shadow-2xl border border-gray-300 block"
+                style={{ maxHeight: 'calc(100vh - 200px)' }}
               />
 
               {/* Bounding Box Overlay */}
-              {result && (
+              {result && result.bounding_box && (
                 <div
-                  className="absolute border-2 border-red-500 bg-red-500/20 shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] transition-all duration-500 flex items-end justify-end p-1 animate-in zoom-in-95"
+                  className="absolute border-4 border-red-500 bg-red-500/20 transition-all duration-500"
                   style={{
                     left: `${(result.bounding_box[0] / imageSize.width) * 100}%`,
                     top: `${(result.bounding_box[1] / imageSize.height) * 100}%`,
                     width: `${(result.bounding_box[2] / imageSize.width) * 100}%`,
                     height: `${(result.bounding_box[3] / imageSize.height) * 100}%`,
+                    pointerEvents: 'none',
                   }}
                 >
-                  <span className="bg-red-500 text-white text-[10px] px-1 font-bold rounded-sm shadow">
-                    APPROVAL STAMP
-                  </span>
+                  <div className="absolute -top-6 left-0 bg-red-500 text-white text-xs px-2 py-1 font-bold rounded shadow-lg whitespace-nowrap">
+                    APPROVAL STAMP DETECTED
+                  </div>
                 </div>
               )}
             </div>
