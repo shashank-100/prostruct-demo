@@ -14,8 +14,8 @@ BBOX_MARGIN = 40
 def detect_stamp_region(page_image: Image.Image):
     """
     Returns a LIST of bounding boxes for all detected stamps.
-    Uses Canny edge detection to find stamp box borders.
-    Falls back to heuristic if nothing found.
+    Uses HoughCircles to detect circular stamp seals in the right title block.
+    Falls back to contour detection if no circles found.
     """
     img_w, img_h = page_image.size
     aspect = img_w / img_h
@@ -29,7 +29,37 @@ def detect_stamp_region(page_image: Image.Image):
     gray = np.array(search_crop.convert("L"))
     rw, rh = search_crop.size
 
+    # First try: Detect circular stamps using HoughCircles
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    circles = cv2.HoughCircles(
+        blurred,
+        cv2.HOUGH_GRADIENT,
+        dp=1,
+        minDist=200,  # Stamps should be at least 200px apart
+        param1=50,
+        param2=30,
+        minRadius=80,  # Stamps are typically 160-600px diameter
+        maxRadius=300
+    )
+
+    # If circles found, use them
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        result = []
+        for circle in circles[0, :]:
+            cx, cy, radius = circle
+            # Convert circle to bounding box
+            bx = max(0, sx + cx - radius - BBOX_MARGIN)
+            by = max(0, sy + cy - radius - BBOX_MARGIN)
+            size = (radius + BBOX_MARGIN) * 2
+            bw = min(size, img_w - bx)
+            bh = min(size, img_h - by)
+            result.append((bx, by, bw, bh))
+
+        if result:
+            return result[:4]  # Return up to 4 stamps
+
+    # Fallback: Use edge detection
     edges = cv2.Canny(blurred, 50, 150)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     dilated = cv2.dilate(edges, kernel, iterations=2)
