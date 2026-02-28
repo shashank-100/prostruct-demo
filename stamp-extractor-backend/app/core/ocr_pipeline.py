@@ -6,6 +6,7 @@ from PIL import Image
 def preprocess_for_ocr(image: Image.Image):
     """
     Returns (processed_image_ndarray, scale_factor)
+    Minimal preprocessing - upscale only, let Tesseract handle the rest.
     """
     img = np.array(image)
 
@@ -15,32 +16,27 @@ def preprocess_for_ocr(image: Image.Image):
     else:
         gray = img
 
-    # Upscale: make sure shorter dimension >= 300 px
+    # Upscale: make sure shorter dimension >= 800 px for better OCR accuracy
     h, w = gray.shape
     min_dim = min(h, w)
     scale = 1.0
-    if min_dim < 300:
-        scale = 300 / min_dim
+    if min_dim < 800:
+        scale = 800 / min_dim
         new_w = int(w * scale)
         new_h = int(h * scale)
         gray = cv2.resize(gray, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
 
-    # Adaptive threshold
-    thresh = cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        blockSize=31,
-        C=10,
-    )
+    # Apply slight sharpening to enhance text edges
+    kernel = np.array([[-1, -1, -1],
+                       [-1,  9, -1],
+                       [-1, -1, -1]])
+    sharpened = cv2.filter2D(gray, -1, kernel)
 
-    # Slight dilation
-    kernel = np.ones((2, 2), np.uint8)
-    processed = cv2.dilate(thresh, kernel, iterations=1)
-
-    return processed, scale
+    return sharpened, scale
 
 def run_ocr(image: np.ndarray) -> str:
-    config = r'--oem 3 --psm 11'
-    text = pytesseract.image_to_string(image, config=config)
+    # PSM 11 = sparse text, find as much text as possible (best for stamps)
+    # OEM 1 = LSTM neural net mode (better accuracy for varied fonts/rotation)
+    config = r'--oem 1 --psm 11'
+    text = pytesseract.image_to_string(image, config=config, lang='eng')
     return text

@@ -5,12 +5,17 @@ import { UploadCloud, FileText, CheckCircle, Copy, Loader2, ChevronLeft, Chevron
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000';
 
-interface StampResult {
-  page: number;
+interface Stamp {
   symbol_type: string;
   bounding_box: [number, number, number, number];
   engineer_name: string | null;
   license_number: string | null;
+}
+
+interface StampResult {
+  page: number;
+  stamps: Stamp[];
+  raw_text: string;
   units: string;
 }
 
@@ -24,8 +29,10 @@ export default function Home() {
   const [result, setResult] = useState<StampResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [displayedImageSize, setDisplayedImageSize] = useState({ width: 0, height: 0 });
+  const [stampPreviews, setStampPreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Recalculate displayed size whenever the window is resized so the
   // bounding-box overlay stays aligned after the user resizes the browser.
@@ -104,6 +111,7 @@ export default function Home() {
     if (newPage !== currentPage && file) {
       setCurrentPage(newPage);
       setResult(null);
+      setStampPreviews([]);
       loadPageImage(file, newPage);
     }
   };
@@ -127,9 +135,34 @@ export default function Home() {
 
       const data = await res.json();
       console.log('Extraction result:', data);
-      console.log('Bounding box:', data.bounding_box);
-      console.log('Image size:', imageSize);
       setResult(data);
+
+      // Generate cropped previews for each stamp
+      if (data.stamps && data.stamps.length > 0 && imageRef.current) {
+        const previews: string[] = [];
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+          for (const stamp of data.stamps) {
+            const [x, y, w, h] = stamp.bounding_box;
+            const scaleX = imageRef.current.naturalWidth / imageSize.width;
+            const scaleY = imageRef.current.naturalHeight / imageSize.height;
+
+            canvas.width = w * scaleX;
+            canvas.height = h * scaleY;
+
+            ctx.drawImage(
+              imageRef.current,
+              x * scaleX, y * scaleY, w * scaleX, h * scaleY,
+              0, 0, canvas.width, canvas.height
+            );
+
+            previews.push(canvas.toDataURL('image/jpeg', 0.9));
+          }
+        }
+        setStampPreviews(previews);
+      }
     } catch (err) {
       console.error(err);
       setError('Extraction failed. Make sure the backend is running.');
@@ -275,20 +308,51 @@ export default function Home() {
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">2. Extraction Results</h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-                  <p className="text-xs text-gray-500 font-medium mb-1">Engineer Name</p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {result.engineer_name || 'NOT DETECTED'}
-                  </p>
+              {result.stamps.length === 0 ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-yellow-800">No stamps detected on this page</p>
                 </div>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-                  <p className="text-xs text-gray-500 font-medium mb-1">License Number</p>
-                  <p className="text-sm font-bold text-gray-900">
-                    {result.license_number || 'NOT DETECTED'}
-                  </p>
+              ) : (
+                <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                  {result.stamps.map((stamp, idx) => (
+                    <div key={idx} className="bg-white border-2 border-gray-300 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <p className="text-xs text-gray-700 font-bold uppercase">Stamp {idx + 1}</p>
+                      </div>
+
+                      {/* Cropped Preview */}
+                      {stampPreviews[idx] && (
+                        <div className="mb-3 bg-gray-100 rounded-lg p-2 border border-gray-200">
+                          <img
+                            src={stampPreviews[idx]}
+                            alt={`Stamp ${idx + 1} preview`}
+                            className="w-full h-auto rounded"
+                          />
+                        </div>
+                      )}
+
+                      {/* Info Grid */}
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Engineer Name</p>
+                          <p className="text-sm font-bold text-gray-900">{stamp.engineer_name || 'NOT DETECTED'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">License Number</p>
+                          <p className="text-sm font-bold text-blue-600">{stamp.license_number || 'NOT DETECTED'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium">Bounding Box</p>
+                          <p className="text-xs font-mono text-gray-700">
+                            [{stamp.bounding_box.join(', ')}]
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
 
               <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">JSON Output</h2>
               <div className="bg-gray-900 rounded-lg shadow-inner flex-1 flex flex-col max-h-[300px]">
@@ -339,23 +403,24 @@ export default function Home() {
                 }}
               />
 
-              {/* Bounding Box Overlay */}
-              {result && result.bounding_box && displayedImageSize.width > 0 && (
+              {/* Bounding Box Overlays */}
+              {result && result.stamps && displayedImageSize.width > 0 && result.stamps.map((stamp, idx) => (
                 <div
+                  key={idx}
                   className="absolute border-4 border-red-500 bg-red-500/20 transition-all duration-500"
                   style={{
-                    left: `${(result.bounding_box[0] / imageSize.width) * displayedImageSize.width}px`,
-                    top: `${(result.bounding_box[1] / imageSize.height) * displayedImageSize.height}px`,
-                    width: `${(result.bounding_box[2] / imageSize.width) * displayedImageSize.width}px`,
-                    height: `${(result.bounding_box[3] / imageSize.height) * displayedImageSize.height}px`,
+                    left: `${(stamp.bounding_box[0] / imageSize.width) * displayedImageSize.width}px`,
+                    top: `${(stamp.bounding_box[1] / imageSize.height) * displayedImageSize.height}px`,
+                    width: `${(stamp.bounding_box[2] / imageSize.width) * displayedImageSize.width}px`,
+                    height: `${(stamp.bounding_box[3] / imageSize.height) * displayedImageSize.height}px`,
                     pointerEvents: 'none',
                   }}
                 >
                   <div className="absolute -top-6 left-0 bg-red-500 text-white text-xs px-2 py-1 font-bold rounded shadow-lg whitespace-nowrap">
-                    APPROVAL STAMP DETECTED
+                    STAMP {idx + 1}: {stamp.license_number || 'N/A'}
                   </div>
                 </div>
-              )}
+              ))}
             </div>
           ) : null}
         </section>
