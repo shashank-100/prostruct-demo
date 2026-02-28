@@ -2,14 +2,18 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle, Copy, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Set up PDF.js worker
-if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-}
+import dynamic from 'next/dynamic';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://pleasant-exploration-production-8b84.up.railway.app';
+
+// Dynamically import PDF.js only on client-side
+let pdfjsLib: any = null;
+if (typeof window !== 'undefined') {
+  import('pdfjs-dist').then((pdfjs) => {
+    pdfjsLib = pdfjs;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  });
+}
 
 interface Stamp {
   symbol_type: string;
@@ -66,15 +70,19 @@ export default function Home() {
       try {
         setIsProcessing(true);
 
-        // Load PDF client-side with PDF.js
-        const arrayBuffer = await selectedFile.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
+        if (pdfjsLib) {
+          // Load PDF client-side with PDF.js
+          const arrayBuffer = await selectedFile.arrayBuffer();
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
 
-        setPdfDoc(pdf);
-        setPageCount(pdf.numPages);
-        setCurrentPage(0);
-        await renderPage(pdf, 0);
+          setPdfDoc(pdf);
+          setPageCount(pdf.numPages);
+          setCurrentPage(0);
+          await renderPage(pdf, 0);
+        } else {
+          setError('PDF.js not loaded yet, please try again');
+        }
       } catch (err) {
         console.error(err);
         setError('Failed to load PDF');
