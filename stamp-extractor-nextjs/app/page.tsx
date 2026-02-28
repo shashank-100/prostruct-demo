@@ -2,6 +2,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle, Copy, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://pleasant-exploration-production-8b84.up.railway.app';
 
@@ -30,6 +36,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [displayedImageSize, setDisplayedImageSize] = useState({ width: 0, height: 0 });
   const [stampPreviews, setStampPreviews] = useState<string[]>([]);
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,51 +63,47 @@ export default function Home() {
       setResult(null);
       setError(null);
 
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
       try {
         setIsProcessing(true);
-        const res = await fetch(`${API_BASE}/get-info`, {
-          method: 'POST',
-          body: formData,
-        });
 
-        if (!res.ok) throw new Error('Failed to load PDF info');
+        // Load PDF client-side with PDF.js
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
 
-        const data = await res.json();
-        setPageCount(data.page_count);
+        setPdfDoc(pdf);
+        setPageCount(pdf.numPages);
         setCurrentPage(0);
-        await loadPageImage(selectedFile, 0);
+        await renderPage(pdf, 0);
       } catch (err) {
         console.error(err);
-        setError('Failed to load PDF. Make sure the backend is running.');
+        setError('Failed to load PDF');
       } finally {
         setIsProcessing(false);
       }
     }
   };
 
-  const loadPageImage = async (selectedFile: File, pageNum: number) => {
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('page', pageNum.toString());
-
+  const renderPage = async (pdf: any, pageNum: number) => {
     try {
       setIsProcessing(true);
-      const res = await fetch(`${API_BASE}/get-page-image`, {
-        method: 'POST',
-        body: formData,
-      });
+      const page = await pdf.getPage(pageNum + 1); // PDF.js pages are 1-indexed
 
-      if (!res.ok) throw new Error('Failed to load page image');
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
 
-      const data = await res.json();
-      setPageImage(data.image);
-      setImageSize({ width: data.width, height: data.height });
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await page.render({ canvasContext: context, viewport }).promise;
+
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+      setPageImage(imageData);
+      setImageSize({ width: viewport.width, height: viewport.height });
     } catch (err) {
       console.error(err);
-      setError('Failed to load page image');
+      setError('Failed to render page');
     } finally {
       setIsProcessing(false);
     }
@@ -108,11 +111,11 @@ export default function Home() {
 
   const handlePageChange = (delta: number) => {
     const newPage = Math.max(0, Math.min(pageCount - 1, currentPage + delta));
-    if (newPage !== currentPage && file) {
+    if (newPage !== currentPage && pdfDoc) {
       setCurrentPage(newPage);
       setResult(null);
       setStampPreviews([]);
-      loadPageImage(file, newPage);
+      renderPage(pdfDoc, newPage);
     }
   };
 
