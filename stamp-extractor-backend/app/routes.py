@@ -9,6 +9,7 @@ from app.schemas import StampResponse, StampInfo
 from PIL import Image
 
 router = APIRouter()
+PREVIEW_DPI = 100  # Very low DPI for fast page previews
 DETECT_DPI = 150  # Low DPI for fast region detection
 OCR_DPI = 600     # High DPI for accurate OCR on cropped regions only
 
@@ -37,11 +38,11 @@ async def get_page_image(file: UploadFile = File(...), page: int = Form(...)):
         if page < 0 or page >= len(doc):
             raise HTTPException(status_code=400, detail="Invalid page number")
 
-        print(f"[IMAGE] Rendering page {page} at {DETECT_DPI} DPI...")
-        page_img = render_page_to_image(doc, page, dpi=DETECT_DPI)
+        print(f"[IMAGE] Rendering page {page} at {PREVIEW_DPI} DPI...")
+        page_img = render_page_to_image(doc, page, dpi=PREVIEW_DPI)
 
         buffered = BytesIO()
-        page_img.save(buffered, format="JPEG", quality=85, optimize=True)
+        page_img.save(buffered, format="JPEG", quality=70, optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
 
         print(f"[IMAGE] Success! Page {page}: {page_img.size}, {len(img_str)/1024:.1f} KB base64")
