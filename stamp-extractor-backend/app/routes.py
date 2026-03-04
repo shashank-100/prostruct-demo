@@ -6,6 +6,7 @@ from app.core.layout_detector import detect_stamp_region
 from app.core.ocr_pipeline import preprocess_for_ocr
 from app.core.extractor import extract_fields_with_boxes
 from app.schemas import StampResponse, StampInfo
+from app.session_manager import session_manager
 from PIL import Image
 
 router = APIRouter()
@@ -16,8 +17,28 @@ OCR_DPI = 600     # High DPI for accurate OCR on cropped regions only
 async def root():
     return {"message": "Stamp Extractor API - Precise Multi-Stamp Ready", "status": "ok"}
 
+@router.post("/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    """Upload PDF and get session ID + page count"""
+    try:
+        contents = await file.read()
+        doc = open_pdf(contents)
+        page_count = len(doc)
+
+        # Create session and store PDF
+        session_id = session_manager.create_session(contents)
+
+        return {
+            "session_id": session_id,
+            "page_count": page_count,
+            "filename": file.filename
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/get-info")
 async def get_pdf_info(file: UploadFile = File(...)):
+    """Legacy endpoint - kept for backwards compatibility"""
     try:
         contents = await file.read()
         doc = open_pdf(contents)
@@ -26,12 +47,29 @@ async def get_pdf_info(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/get-page-image")
-async def get_page_image(file: UploadFile = File(...), page: int = Form(...)):
+async def get_page_image(
+    session_id: str = Form(None),
+    file: UploadFile = File(None),
+    page: int = Form(...)
+):
+    """Get page image - supports both session ID and direct file upload"""
     import traceback
     try:
         print(f"[IMAGE] Request for page {page}")
-        contents = await file.read()
-        print(f"[IMAGE] PDF loaded: {len(contents)/1024:.1f} KB")
+
+        # Try session ID first, fall back to file upload
+        if session_id:
+            pdf_path = session_manager.get_pdf_path(session_id)
+            if not pdf_path:
+                raise HTTPException(status_code=404, detail="Session not found or expired")
+            with open(pdf_path, 'rb') as f:
+                contents = f.read()
+            print(f"[IMAGE] PDF loaded from session: {len(contents)/1024:.1f} KB")
+        elif file:
+            contents = await file.read()
+            print(f"[IMAGE] PDF loaded from upload: {len(contents)/1024:.1f} KB")
+        else:
+            raise HTTPException(status_code=400, detail="Either session_id or file must be provided")
 
         doc = open_pdf(contents)
         if page < 0 or page >= len(doc):
@@ -54,14 +92,30 @@ async def get_page_image(file: UploadFile = File(...), page: int = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/extract-stamp", response_model=StampResponse)
-async def extract_stamp(file: UploadFile = File(...), page: int = Form(...)):
+async def extract_stamp(
+    session_id: str = Form(None),
+    file: UploadFile = File(None),
+    page: int = Form(...)
+):
+    """Extract stamps - supports both session ID and direct file upload"""
     try:
         import time
         start = time.time()
         print(f"\n[EXTRACT] Starting extraction for page {page}...")
 
-        contents = await file.read()
-        print(f"[EXTRACT] PDF loaded ({len(contents)/1024:.1f} KB)")
+        # Try session ID first, fall back to file upload
+        if session_id:
+            pdf_path = session_manager.get_pdf_path(session_id)
+            if not pdf_path:
+                raise HTTPException(status_code=404, detail="Session not found or expired")
+            with open(pdf_path, 'rb') as f:
+                contents = f.read()
+            print(f"[EXTRACT] PDF loaded from session ({len(contents)/1024:.1f} KB)")
+        elif file:
+            contents = await file.read()
+            print(f"[EXTRACT] PDF loaded from upload ({len(contents)/1024:.1f} KB)")
+        else:
+            raise HTTPException(status_code=400, detail="Either session_id or file must be provided")
 
         doc = open_pdf(contents)
         if page < 0 or page >= len(doc): raise HTTPException(status_code=400, detail="Invalid page number")

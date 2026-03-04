@@ -159,8 +159,8 @@ def extract_fields_multi(image):
 
     results = []
     processed_licenses = set()
-    # Match 4-6 digit license numbers; allow optional leading noise char
-    license_pattern = r'\b\d{4,6}\b'
+    # Match 4-10 digit license numbers; allow optional leading noise char
+    license_pattern = r'\b\d{4,10}\b'
 
     for i, line_text in enumerate(cleaned_lines):
         # Clean line text: remove common OCR artifacts around numbers
