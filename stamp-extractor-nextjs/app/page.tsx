@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle, Copy, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://pleasant-exploration-production-8b84.up.railway.app';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://impartial-transformation-production-4a45.up.railway.app';
 
 interface Stamp {
   symbol_type: string;
